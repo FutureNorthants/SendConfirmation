@@ -32,6 +32,7 @@ namespace SendConfirmation
         private static String taskToken;
         private static String cxmEndPoint;
         private static String cxmAPIKey;
+        private static String bucketName;
 
         private Secrets secrets = null;
 
@@ -43,15 +44,21 @@ namespace SendConfirmation
             {
                 cxmEndPoint = secrets.cxmEndPointTest;
                 cxmAPIKey = secrets.cxmAPIKeyTest;
+                bucketName = secrets.templateBucketTest;
                 JObject jsonText = JObject.Parse(input.ToString());
                 caseReference = (String)jsonText.SelectToken("CaseReference");
                 taskToken = (String)jsonText.SelectToken("TaskToken");
-                if (context.InvokedFunctionArn.ToLower().Contains("prod"))
+                try 
                 {
-                    Console.WriteLine("Prod version");
-                    cxmEndPoint = secrets.cxmEndPointLive;
-                    cxmAPIKey = secrets.cxmAPIKeyLive;
+                    if (context.InvokedFunctionArn.ToLower().Contains("prod"))
+                    {
+                        cxmEndPoint = secrets.cxmEndPointLive;
+                        cxmAPIKey = secrets.cxmAPIKeyLive;
+                        bucketName = secrets.templateBucketLive;
+                    }
                 }
+                catch (Exception) { }
+               
                 CaseDetails caseDetails = await GetCaseDetailsAsync();
                 String emailBody = await GetEmailBody(caseDetails);
                 if (await SendEmail(caseDetails,emailBody))
@@ -76,9 +83,10 @@ namespace SendConfirmation
             }
             try
             {
+                s3Client = new AmazonS3Client(primaryRegion);
                 GetObjectRequest objectRequest = new GetObjectRequest
                 {
-                    BucketName = "norbert.templates",
+                    BucketName = bucketName,
                     Key = "email-no-faq.txt"
                 };
                 using (GetObjectResponse objectResponse = await s3Client.GetObjectAsync(objectRequest))
@@ -144,11 +152,11 @@ namespace SendConfirmation
         {
             try
             {
-                AmazonSQSClient amazonSQSClient = new AmazonSQSClient();
+                AmazonSQSClient amazonSQSClient = new AmazonSQSClient(sqsRegion);
                 try
                 {
                     SendMessageRequest sendMessageRequest = new SendMessageRequest();
-                    sendMessageRequest.QueueUrl = Environment.GetEnvironmentVariable("sqsEmailURL");
+                    sendMessageRequest.QueueUrl = secrets.sqsEmailURL;
                     sendMessageRequest.MessageBody = emailBody;
                     Dictionary<string, MessageAttributeValue> MessageAttributes = new Dictionary<string, MessageAttributeValue>();
                     MessageAttributeValue messageTypeAttribute1 = new MessageAttributeValue();
@@ -275,5 +283,7 @@ namespace SendConfirmation
         public String botPersona2 { get; set; }
         public String organisationName { get; set; }
         public String norbertSendFrom { get; set; }
+        public String templateBucketTest { get; set; }
+        public String templateBucketLive { get; set; }
     }
 }
