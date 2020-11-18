@@ -33,6 +33,8 @@ namespace SendConfirmation
         private static String cxmEndPoint;
         private static String cxmAPIKey;
         private static String bucketName;
+        private static String norbertSendFrom;
+        private static String sqsEmailURL;
 
         private Secrets secrets = null;
 
@@ -48,6 +50,8 @@ namespace SendConfirmation
                 JObject jsonText = JObject.Parse(input.ToString());
                 caseReference = (String)jsonText.SelectToken("CaseReference");
                 taskToken = (String)jsonText.SelectToken("TaskToken");
+                norbertSendFrom = secrets.norbertSendFromTest;
+                sqsEmailURL = secrets.sqsEmailURLTest;
                 try 
                 {
                     if (context.InvokedFunctionArn.ToLower().Contains("prod"))
@@ -55,16 +59,26 @@ namespace SendConfirmation
                         cxmEndPoint = secrets.cxmEndPointLive;
                         cxmAPIKey = secrets.cxmAPIKeyLive;
                         bucketName = secrets.templateBucketLive;
+                        norbertSendFrom = secrets.norbertSendFromLive;
+                        sqsEmailURL = secrets.sqsEmailURLLive;
                     }
                 }
                 catch (Exception) { }
                
                 CaseDetails caseDetails = await GetCaseDetailsAsync();
                 String emailBody = await GetEmailBody(caseDetails);
-                if (await SendEmail(caseDetails,emailBody))
+                if(!caseDetails.updatedCase)
+                {
+                    if (await SendEmail(caseDetails, emailBody))
+                    {
+                        await SendSuccessAsync();
+                    }
+                }
+                else
                 {
                     await SendSuccessAsync();
                 }
+               
             }
         }
 
@@ -132,6 +146,12 @@ namespace SendConfirmation
                     caseDetails.email = (String)caseSearch.SelectToken("values.email");
                     caseDetails.name = (String)caseSearch.SelectToken("values.first_name") + " " + (String)caseSearch.SelectToken("values.surname");
                     caseDetails.enquiryDetails = (String)caseSearch.SelectToken("values.enquiry_details");
+                    try
+                    {
+                        caseDetails.updatedCase = (Boolean)caseSearch.SelectToken("values.customer_has_updated");
+                    }
+                    catch(Exception)
+                    {}
                 }
                 else
                 {
@@ -156,7 +176,7 @@ namespace SendConfirmation
                 try
                 {
                     SendMessageRequest sendMessageRequest = new SendMessageRequest();
-                    sendMessageRequest.QueueUrl = secrets.sqsEmailURL;
+                    sendMessageRequest.QueueUrl = sqsEmailURL;
                     sendMessageRequest.MessageBody = emailBody;
                     Dictionary<string, MessageAttributeValue> MessageAttributes = new Dictionary<string, MessageAttributeValue>();
                     MessageAttributeValue messageTypeAttribute1 = new MessageAttributeValue();
@@ -171,10 +191,6 @@ namespace SendConfirmation
                     messageTypeAttribute3.DataType = "String";
                     messageTypeAttribute3.StringValue = secrets.organisationName + " : Your Call Number is " + caseReference;
                     MessageAttributes.Add("Subject", messageTypeAttribute3);
-                    MessageAttributeValue messageTypeAttribute4 = new MessageAttributeValue();
-                    messageTypeAttribute4.DataType = "String";
-                    messageTypeAttribute4.StringValue = secrets.norbertSendFrom;
-                    MessageAttributes.Add("From", messageTypeAttribute4);
                     sendMessageRequest.MessageAttributes = MessageAttributes;
                     SendMessageResponse sendMessageResponse = await amazonSQSClient.SendMessageAsync(sendMessageRequest);
                     return true;
@@ -270,6 +286,7 @@ namespace SendConfirmation
         public String email { get; set; } = "";
         public String name { get; set; } = "";
         public String enquiryDetails { get; set; } = "";
+        public Boolean updatedCase { get; set; } = false;
     }
 
     public class Secrets
@@ -279,10 +296,13 @@ namespace SendConfirmation
         public String cxmAPIKeyTest { get; set; }
         public String cxmAPIKeyLive { get; set; }
         public String sqsEmailURL { get; set; }
+        public String sqsEmailURLLive { get; set; }
+        public String sqsEmailURLTest { get; set; }
         public String botPersona1 { get; set; }
         public String botPersona2 { get; set; }
         public String organisationName { get; set; }
-        public String norbertSendFrom { get; set; }
+        public String norbertSendFromLive { get; set; }
+        public String norbertSendFromTest { get; set; }
         public String templateBucketTest { get; set; }
         public String templateBucketLive { get; set; }
     }
