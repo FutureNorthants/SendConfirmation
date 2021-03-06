@@ -33,7 +33,6 @@ namespace SendConfirmation
         private static String cxmEndPoint;
         private static String cxmAPIKey;
         private static String bucketName;
-        private static String norbertSendFrom;
         private static String sqsEmailURL;
 
         private Secrets secrets = null;
@@ -50,7 +49,6 @@ namespace SendConfirmation
                 JObject jsonText = JObject.Parse(input.ToString());
                 caseReference = (String)jsonText.SelectToken("CaseReference");
                 taskToken = (String)jsonText.SelectToken("TaskToken");
-                norbertSendFrom = secrets.norbertSendFromTest;
                 sqsEmailURL = secrets.sqsEmailURLTest;
                 try 
                 {
@@ -59,7 +57,6 @@ namespace SendConfirmation
                         cxmEndPoint = secrets.cxmEndPointLive;
                         cxmAPIKey = secrets.cxmAPIKeyLive;
                         bucketName = secrets.templateBucketLive;
-                        norbertSendFrom = secrets.norbertSendFromLive;
                         sqsEmailURL = secrets.sqsEmailURLLive;
                     }
                 }
@@ -67,15 +64,22 @@ namespace SendConfirmation
                
                 CaseDetails caseDetails = await GetCaseDetailsAsync();
                 String emailBody = await GetEmailBody(caseDetails);
-                if(!caseDetails.updatedCase)
+                if(!caseDetails.updatedCase&&!caseDetails.email.Contains("northampton.gov.uk")&&!caseDetails.email.Contains("nph.org.uk")&&!caseDetails.email.Contains("northamptonpartnershiphomes"))
                 {
                     if (await SendEmail(caseDetails, emailBody))
                     {
+                        Console.WriteLine(caseReference + " : Sending confirmation");
                         await SendSuccessAsync();
+                    }
+                    else
+                    {
+                        Console.WriteLine(caseReference + " : Sending confirmation");
+                        await SendFailureAsync("Sending email  for " + caseReference," ");
                     }
                 }
                 else
                 {
+                    Console.WriteLine(caseReference + " : Confirmation Suppressed");
                     await SendSuccessAsync();
                 }
                
@@ -151,7 +155,9 @@ namespace SendConfirmation
                         caseDetails.updatedCase = (Boolean)caseSearch.SelectToken("values.customer_has_updated");
                     }
                     catch(Exception)
-                    {}
+                    {
+                        caseDetails.updatedCase = false;
+                    }
                 }
                 else
                 {
@@ -172,6 +178,8 @@ namespace SendConfirmation
         {
             try
             {
+                Console.WriteLine("DEBUG : SQS URL is " + sqsEmailURL);
+
                 AmazonSQSClient amazonSQSClient = new AmazonSQSClient(sqsRegion);
                 try
                 {
@@ -295,7 +303,6 @@ namespace SendConfirmation
         public String cxmEndPointLive { get; set; }
         public String cxmAPIKeyTest { get; set; }
         public String cxmAPIKeyLive { get; set; }
-        public String sqsEmailURL { get; set; }
         public String sqsEmailURLLive { get; set; }
         public String sqsEmailURLTest { get; set; }
         public String botPersona1 { get; set; }

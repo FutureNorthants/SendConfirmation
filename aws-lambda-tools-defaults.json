@@ -17,5 +17,8 @@
     "function-name"        : "SendConfirmation",
     "function-role"        : "arn:aws:iam::898823515462:role/lambdaMyCouncil",
     "tracing-mode"         : "PassThrough",
-    "environment-variables" : ""
+    "environment-variables" : "",
+    "function-description"  : "Step Function - Send customer confirmation from either eMail or ContactUS",
+    "package-type"          : "Zip",
+    "image-tag"             : ""
 }
